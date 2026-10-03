@@ -1,0 +1,9 @@
+python-telegram-bot
+asyncpg
+python-dotenv
+google-genai
+apscheduler
+pandas
+openpyxl
+fastapi
+uvicorn
