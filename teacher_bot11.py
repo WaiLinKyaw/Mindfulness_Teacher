@@ -731,8 +731,7 @@ async def add_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ *အသုံးပြုပုံ မှားယွင်းနေပါသည်*\n\n"
             "ပုံစံ: `/add_task <အချိန်ပိုင်း> | <ခေါင်းစဉ်> | <ရှင်းလင်းချက်>`\n\n"
             "ဥပမာ:\n"
-            "`/add_task morning | မနက်ခင်း အကြောလျှော့ခြင်း | ခန္ဓာကိုယ်ကို သတိဖြင့် ဖြေလျှော့ပါ`\n\n"
-            "*(အချိန်ပိုင်း နေရာတွင် morning, afternoon သို့မဟုတ် evening ဟု ရေးပေးပါ)*",
+            "`/add_task morning | မနက်ခင်း အကြောလျှော့ခြင်း | ခန္ဓာကိုယ်ကို သတိဖြင့် ဖြေလျှော့ပါ`",
             parse_mode="Markdown"
         )
         return
@@ -747,21 +746,24 @@ async def add_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     async with db_pool.acquire() as conn:
+        # 🟢 ၁။ ဤ Batch အတွက်သာ လက်ရှိ max order ကို ရှာခြင်း
         last_order = await conn.fetchval(
-            "SELECT COALESCE(MAX(task_order), 0) FROM routine_templates WHERE section = $1;",
-            section
+            "SELECT COALESCE(MAX(task_order), 0) FROM routine_templates WHERE section = $1 AND batch_id = $2;",
+            section, BATCH_ID
         )
         new_order = last_order + 1
+        
+        # 🟢 ၂။ SQL တွင် batch_id ကော်လံနှင့် $5 parameter ထည့်သွင်းခြင်း
         await conn.execute(
             """
-            INSERT INTO routine_templates (section, task_order, title, description, status, is_active)
-            VALUES ($1, $2, $3, $4, 'active', TRUE);
+            INSERT INTO routine_templates (section, task_order, title, description, status, is_active, batch_id)
+            VALUES ($1, $2, $3, $4, 'active', TRUE, $5);
             """,
             section, new_order, title, description, BATCH_ID
         )
 
     await update.message.reply_text(
-        f"✅ *Task အသစ် အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ!*\n\n"
+        f"✅ *({BATCH_ID}) အတွက် Task အသစ် အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ!*\n\n"
         f"⏰ အချိန်ပိုင်း: *{section.capitalize()}* (အမှတ်စဉ်: {new_order})\n"
         f"📌 ခေါင်းစဉ်: *{title}*\n"
         f"📝 ရှင်းလင်းချက်: _{description}_",
@@ -834,8 +836,54 @@ async def toggle_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         parse_mode="Markdown"
     )
 
-
 async def list_tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
+
+    # Command ထဲတွင် batch နာမည် ပါမပါ စစ်ဆေးခြင်း (ဥပမာ: /list_tasks batch_Youth)
+    args = context.args
+    target_batch = args[0] if args else BATCH_ID
+
+    async with db_pool.acquire() as conn:
+        # 🟢 active_tasks တွင် batch_id ဖြင့် စစ်ထုတ်ခြင်း
+        active_tasks = await conn.fetch(
+            "SELECT id, section, task_order, title FROM routine_templates WHERE status = 'active' AND batch_id = $1 ORDER BY section, task_order ASC;",
+            target_batch
+        )
+        # 🟢 next_tasks တွင် batch_id ဖြင့် စစ်ထုတ်ခြင်း
+        next_tasks = await conn.fetch(
+            "SELECT id, section, task_order, title FROM routine_templates WHERE status = 'next' AND batch_id = $1 ORDER BY section, task_order ASC;",
+            target_batch
+        )
+
+    msg = [f"📋 *Routine စီမံခန့်ခွဲမှု အခြေအနေ ({target_batch})*\n"]
+    
+    msg.append("🟢 *လက်ရှိ သုံးနေသော Tasks (Active):*")
+    if active_tasks:
+        for t in active_tasks:
+            clean_title = t['title'].replace("*", "").replace("_", " ")
+            sec_code = t['section'][:1].upper()
+            msg.append(f"  • [{sec_code}] {clean_title} (ID: `{t['id']}`)")
+    else:
+        msg.append("  _(မရှိသေးပါ)_")
+
+    msg.append("\n🟡 *နောက်အပတ်အတွက် ကြိုထည့်ထားသော Tasks (Next):*")
+    if next_tasks:
+        for t in next_tasks:
+            clean_title = t['title'].replace("*", "").replace("_", " ")
+            sec_code = t['section'][:1].upper()
+            msg.append(f"  • [{sec_code}] {clean_title} (ID: `{t['id']}`)")
+        msg.append("\n👉 အပတ်သစ်သို့ ပြောင်းလဲအသုံးပြုရန်: `/switch_week`")
+    else:
+        msg.append("  _(ကြိုတင်ထည့်ထားသော Task မရှိပါ)_")
+
+    final_text = "\n".join(msg)
+    try:
+        await update.message.reply_text(final_text, parse_mode="Markdown")
+    except Exception:
+        await update.message.reply_text(final_text)
+        
+async def list_tasks_command2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
 
