@@ -79,7 +79,7 @@ app = FastAPI()
 @app.get("/")
 @app.head("/")
 def health_check():
-    return {"status": "active", "bot": "Teacher Bot (Batch 16) is running successfully!"}
+    return {"status": "active", "bot": "Teacher Bot (Batch TharThar) is running successfully!"}
 
 def run_fastapi():
     port = int(os.getenv("PORT", 8000))
@@ -150,7 +150,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = (
-        f"မင်္ဂလာပါ {update.effective_user.first_name} 🙏 (Admin/Teacher - Batch 16)\n\n"
+        f"မင်္ဂလာပါ {update.effective_user.first_name} 🙏 (Admin/Teacher - Batch TharThar)\n\n"
         "သင်တန်းသားများ၏ တရားလေ့ကျင့်မှု စောင့်ကြည့်စစ်ဆေးနိုင်သော Command များ:\n\n"
         "• `/today` - ယနေ့ သင်တန်းသားများ၏ Routine ပြီးစီးမှု ရာခိုင်နှုန်း စစ်ဆေးရန်\n"
         "• `/questions` - သင်တန်းသားများ မေးထားသော မေးခွန်း/အတွေ့အကြုံများ ဖတ်ရှုရန်\n"
@@ -1381,7 +1381,7 @@ async def post_init(application):
         name="Weekly Report"
     )
     scheduler.start()
-    print("⏰ Routine & Report Schedulers started successfully (Batch 16)...")
+    print("⏰ Routine & Report Schedulers started successfully (Batch TharThar)...")
 
 
 async def manual_weekly_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1573,7 +1573,7 @@ async def main():
     app.add_handler(CallbackQueryHandler(handle_send_routine_callback, pattern=r"^send_routine:"))
     app.add_error_handler(error_handler)
 
-    print("🤖 Teacher Bot (Batch 16) is up and running...")
+    print("🤖 Teacher Bot (Batch TharThar) is up and running...")
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
