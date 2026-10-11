@@ -45,7 +45,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # 🟢 Batch ID သတ်မှတ်ခြင်း (၁၆ ယောက်အုပ်စုအတွက်)
-BATCH_ID = os.getenv("BATCH_ID", "batch_16")
+BATCH_ID = os.getenv("BATCH_ID", "batch_TharThar")
 
 # Admin IDs စာရင်းထဲသို့ ထည့်သွင်းခြင်း (0 မဟုတ်သူများကိုသာ ယူမည်)
 ADMIN_IDS = [
