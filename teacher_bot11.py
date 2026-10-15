@@ -4,6 +4,7 @@ import sys
 from google.genai.errors import APIError
 import re
 from datetime import datetime, timezone, timedelta
+import openpyxl
 from dotenv import load_dotenv
 import asyncpg
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -26,6 +27,9 @@ import io
 import pandas as pd
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.chart import BarChart, Reference
 
 # FastAPI & Uvicorn imports for Port Binding
 from fastapi import FastAPI
@@ -45,7 +49,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # 🟢 Batch ID သတ်မှတ်ခြင်း (၁၆ ယောက်အုပ်စုအတွက်)
-BATCH_ID = os.getenv("BATCH_ID", "batch_TharThar")
+BATCH_ID = os.getenv("BATCH_ID", "batch_Youth")
 
 # Admin IDs စာရင်းထဲသို့ ထည့်သွင်းခြင်း (0 မဟုတ်သူများကိုသာ ယူမည်)
 ADMIN_IDS = [
@@ -60,11 +64,17 @@ def is_admin(user_id: int) -> bool:
 student_bot = Bot(token=STUDENT_BOT_TOKEN)
 
 # Supabase Credentials
-DB_USER = "postgres.vqcoaukndkspyddpnvhd"
-DB_PASSWORD = "F2%e.b6ed4/96y!"
-DB_HOST = "aws-0-ap-northeast-1.pooler.supabase.com"
-DB_PORT = 5432
-DB_NAME = "postgres"
+#DB_USER = "postgres"
+#DB_PASSWORD = "jD7Zx3QP0qRBVyjW"
+#DB_HOST = "db.hsexqfwveqfsyjdbjlee.supabase.co"
+#DB_PORT = 5432
+#DB_NAME = "postgres"
+# Supabase Credentials (.env မှတဆင့် ခေါ်ယူခြင်း)
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = int(os.getenv("DB_PORT", 5432))
+DB_NAME = os.getenv("DB_NAME", "postgres")
 
 MM_TZ = timezone(timedelta(hours=6, minutes=30))
 db_pool = None
@@ -79,7 +89,8 @@ app = FastAPI()
 @app.get("/")
 @app.head("/")
 def health_check():
-    return {"status": "active", "bot": "Teacher Bot (Batch TharThar) is running successfully!"}
+    #return {"status": "active", "bot": "Teacher Bot (Batch "BATCH_ID ") is running successfully!"}
+    return {"status": "active", "bot": f"Teacher Bot ({BATCH_ID}) is running successfully!"}
 
 def run_fastapi():
     port = int(os.getenv("PORT", 8000))
@@ -97,6 +108,7 @@ async def init_db():
         database=DB_NAME,
         min_size=1,
         max_size=5,
+        statement_cache_size=0
     )
     print("✅ Connected to Supabase Pooler.")
 
@@ -150,7 +162,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = (
-        f"မင်္ဂလာပါ {update.effective_user.first_name} 🙏 (Admin/Teacher - Batch TharThar)\n\n"
+        f"မင်္ဂလာပါ {update.effective_user.first_name} 🙏 (Admin/Teacher - {BATCH_ID})\n\n"
         "သင်တန်းသားများ၏ တရားလေ့ကျင့်မှု စောင့်ကြည့်စစ်ဆေးနိုင်သော Command များ:\n\n"
         "• `/today` - ယနေ့ သင်တန်းသားများ၏ Routine ပြီးစီးမှု ရာခိုင်နှုန်း စစ်ဆေးရန်\n"
         "• `/questions` - သင်တန်းသားများ မေးထားသော မေးခွန်း/အတွေ့အကြုံများ ဖတ်ရှုရန်\n"
@@ -185,7 +197,7 @@ async def today_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ယနေ့အတွက် သင်တန်းသားများဘက်မှ မှတ်တမ်း မရှိသေးပါခင်ဗျာ။")
         return
 
-    lines = [f"📊 *ယနေ့ ({today.strftime('%d/%m/%Y')}) သင်တန်းသားများ လေ့ကျင့်မှု အခြေအနေ (Batch TharThar) -*\n"]
+    lines = [f"📊 *ယနေ့ ({today.strftime('%d/%m/%Y')}) သင်တန်းသားများ လေ့ကျင့်မှု အခြေအနေ ({BATCH_ID}) -*\n"]
     for r in rows:
         done = r["completed_tasks"]
         total = r["total_tasks"]
@@ -213,7 +225,7 @@ async def view_questions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("မေးခွန်းနှင့် ဆွေးနွေးချက်များ မရှိသေးပါခင်ဗျာ။")
         return
 
-    lines = ["📝 *နောက်ဆုံး လက်ခံရရှိထားသော မေးခွန်း/အတွေ့အကြုံများ (Batch TharThar) -*\n"]
+    lines = ["📝 *နောက်ဆုံး လက်ခံရရှိထားသော မေးခွန်း/အတွေ့အကြုံများ ({BATCH_ID})-*\n"]
     for r in rows:
         created = r["created_at"].astimezone(MM_TZ).strftime("%d/%m %I:%M %p")
         status = "✅ ဖြေပြီး" if r["teacher_reply"] else "⏳ မဖြေရသေး"
@@ -275,9 +287,9 @@ async def handle_send_routine_callback(update: Update, context: ContextTypes.DEF
     target_student_id = int(parts[2]) if len(parts) > 2 else None
 
     header_titles = {
-        "morning": "🌅 *မနက်ပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*",
-        "afternoon": "☀️ *နေ့လည်ပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*",
-        "evening": "🌙 *ညနေပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*"
+        "morning": "🌅 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3)*မနက်ပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*",
+        "afternoon": "☀️ သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3)*နေ့လည်ပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*",
+        "evening": "🌙 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) *ညနေပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*"
     }
     header_text = header_titles.get(section, "📌 *နေ့စဉ် လေ့ကျင့်ခန်းများ*")
 
@@ -542,7 +554,7 @@ def format_plain_detail_report(student_name: str, task_summary: list, start_date
 
     percent = (total_done / total_assigned * 100) if total_assigned > 0 else 0
 
-    msg = f"📊 *အပတ်စဉ် လေ့ကျင့်မှု အသေးစိတ် မှတ်တမ်း (Batch TharThar)*\n"
+    msg = f"📊 *အပတ်စဉ် လေ့ကျင့်မှု အသေးစိတ် မှတ်တမ်း ({BATCH_ID})*\n"
     msg += f"👤 သင်တန်းသား: *{student_name}*\n"
     msg += f"📅 ကာလ: `{start_date}` မှ `{end_date}` အထိ\n"
     msg += f"📈 စုစုပေါင်း ပြီးမြောက်မှု: *{percent:.1f}%* ({total_done}/{total_assigned} ကြိမ်)\n"
@@ -619,6 +631,408 @@ async def cmd_detail_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("\n".join(msg_lines), parse_mode="Markdown")
 
 async def generate_and_send_report(update_or_query, context, student_id, student_name, start_date, today):
+    async with db_pool.acquire() as conn:
+        detail_query = """
+            SELECT 
+                d.date_val AS log_date, 
+                t.section, 
+                t.title AS task_title,
+                COALESCE(l.is_done, FALSE) AS is_done,
+                COALESCE(l.reflection, '') AS reflection
+            FROM routine_templates t
+            CROSS JOIN (
+                SELECT generate_series($2::date, $3::date, '1 day'::interval)::date AS date_val
+            ) d
+            LEFT JOIN student_daily_logs l 
+                ON l.template_id = t.id 
+                AND l.student_id = $1 
+                AND l.log_date = d.date_val
+            WHERE t.status = 'active' AND t.batch_id = $4
+            ORDER BY d.date_val DESC, t.section ASC, t.task_order ASC;
+        """
+        rows = await conn.fetch(detail_query, student_id, start_date, today, BATCH_ID)
+
+    if not rows:
+        msg = f"📌 {student_name} အတွက် ပြီးခဲ့သည့် ၇ ရက်အတွင်း ဒေတာ မရှိသေးပါ။"
+        if isinstance(update_or_query, Update) and update_or_query.callback_query:
+            await update_or_query.callback_query.edit_message_text(msg)
+        else:
+            await update_or_query.message.reply_text(msg)
+        return
+
+    # ==========================================
+    # 1. TELEGRAM တွင် ပြသရန် Text Report & Graph တည်ဆောက်ခြင်း
+    # ==========================================
+    daily_stats = {}
+    for r in rows:
+        d_val = r["log_date"]
+        if d_val not in daily_stats:
+            daily_stats[d_val] = {"done": 0, "total": 0}
+        daily_stats[d_val]["total"] += 1
+        if r["is_done"]:
+            daily_stats[d_val]["done"] += 1
+
+    done_count = sum(1 for r in rows if r["is_done"])
+    total_count = len(rows)
+
+    report_text = f"📊 *{student_name} ၏ (၇) ရက်တာ အစီရင်ခံစာ*\n"
+    report_text += f"━━━━━━━━━━━━━━━━━━━━━\n"
+    report_text += f"🎯 စုစုပေါင်း ပြီးစီးမှု: *{done_count} / {total_count}* Tasks\n\n"
+    
+    report_text += f"📉 *နေ့အလိုက် ပြီးစီးမှု ဇယား (Progress Graph):*\n"
+    for d_val in sorted(daily_stats.keys()):
+        stats = daily_stats[d_val]
+        d_done = stats["done"]
+        d_total = stats["total"]
+        
+        if d_total > 0:
+            percentage = d_done / d_total
+            filled_blocks = round(percentage * 5)
+            empty_blocks = 5 - filled_blocks
+            bar = "🟩" * filled_blocks + "⬜" * empty_blocks
+        else:
+            bar = "⬜⬜⬜⬜⬜"
+            
+        date_str = d_val.strftime("%m-%d (%a)")
+        report_text += f"`{date_str}` | {bar} *{d_done}/{d_total}*\n"
+
+    report_text += f"━━━━━━━━━━━━━━━━━━━━━\n"
+    report_text += f"📌 *နောက်ဆုံး မှတ်တမ်းအသေးစိတ်:*\n"
+    for r in rows[:10]: 
+        status_icon = "✅" if r["is_done"] else "❌"
+        report_text += f"• `{r['log_date']}` | {r['section'][:4]} | {r['task_title']} {status_icon}\n"
+
+    # ==========================================
+    # 2. EXCEL ဖိုင် (.xlsx) တည်ဆောက်ခြင်း
+    # ==========================================
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Progress Report"
+
+    header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    header_font = Font(name="Myanmar Text", size=11, bold=True, color="FFFFFF")
+    bold_font = Font(name="Myanmar Text", size=10, bold=True)
+    normal_font = Font(name="Myanmar Text", size=10)
+    center_align = Alignment(horizontal="center", vertical="center")
+    left_align = Alignment(horizontal="left", vertical="center")
+    border_thin = Border(
+        left=Side(style='thin', color='D9D9D9'),
+        right=Side(style='thin', color='D9D9D9'),
+        top=Side(style='thin', color='D9D9D9'),
+        bottom=Side(style='thin', color='D9D9D9')
+    )
+
+    ws.merge_cells("A1:E1")
+    title_cell = ws["A1"]
+    title_cell.value = f"Student Progress Report: {student_name} ({start_date} to {today})"
+    title_cell.font = Font(name="Myanmar Text", size=12, bold=True, color="1F4E78")
+    title_cell.alignment = center_align
+
+    ws.merge_cells("A2:E2")
+    summary_cell = ws["A2"]
+    summary_cell.value = f"စုစုပေါင်း ပြီးစီးမှု: {done_count} / {total_count} Tasks"
+    summary_cell.font = bold_font
+    summary_cell.alignment = left_align
+
+    ws.append([]) 
+
+    headers = ["ရက်စွဲ (Date)", "အပိုင်း (Section)", "လေ့ကျင့်ခန်း ခေါင်းစဉ် (Task Title)", "အခြေအနေ (Status)", "ဆင်ခြင်သုံးသပ်ချက် (Reflection)"]
+    ws.append(headers)
+    
+    for col_num in range(1, 6):
+        cell = ws.cell(row=4, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+
+    for r in rows:
+        status_str = "Done (ပြီးပြီ)" if r["is_done"] else "Pending (မပြီးသေး)"
+        row_data = [
+            str(r["log_date"]),
+            r["section"],
+            r["task_title"],
+            status_str,
+            r["reflection"]
+        ]
+        ws.append(row_data)
+
+    for row in ws.iter_rows(min_row=5, max_row=4 + len(rows), min_col=1, max_col=5):
+        for cell in row:
+            cell.font = normal_font
+            cell.border = border_thin
+            if cell.column in [1, 2, 4]:
+                cell.alignment = center_align
+            else:
+                cell.alignment = left_align
+
+    for col in range(1, 6):
+        max_len = 0
+        col_letter = openpyxl.utils.get_column_letter(col)
+        for row in range(4, 5 + len(rows)):
+            cell_value = ws.cell(row=row, column=col).value
+            if cell_value:
+                max_len = max(max_len, len(str(cell_value)))
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 18)
+
+    excel_file = io.BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+    excel_file.name = f"{student_name}_report.xlsx"
+
+    # ==========================================
+    # 3. TELEGRAM သို့ စာသားရော ဖိုင်ပါ ပို့ဆောင်ခြင်း
+    # ==========================================
+    try:
+        target_message = update_or_query.message if isinstance(update_or_query, Update) else update_or_query
+        
+        # 1. ပထမဦးစွာ Text Report (Summary & Graph) ကို ပို့မည်
+        if isinstance(update_or_query, Update) and update_or_query.callback_query:
+            await update_or_query.callback_query.edit_message_text(report_text, parse_mode="Markdown")
+            # ပြီးလျှင် Excel ဖိုင်ကိုပါ နောက်ထပ် မက်ဆေ့ချ်အနေဖြင့် ဆက်တိုက် ပို့မည်
+            await target_message.reply_document(
+                document=excel_file,
+                caption=f"📁 *{student_name}* ၏ အသေးစိတ် Excel အစီရင်ခံစာ",
+                parse_mode="Markdown"
+            )
+            await update_or_query.callback_query.answer()
+        else:
+            await target_message.reply_text(report_text, parse_mode="Markdown")
+            await target_message.reply_document(
+                document=excel_file,
+                caption=f"📁 *{student_name}* ၏ အသေးစိတ် Excel အစီရင်ခံစာ",
+                parse_mode="Markdown"
+            )
+            
+    except Exception as e:
+        print(f"❌ Send Report Error: {e}")
+        
+async def generate_and_send_reportwithexcel(update_or_query, context, student_id, student_name, start_date, today):
+    async with db_pool.acquire() as conn:
+        detail_query = """
+            SELECT 
+                d.date_val AS log_date, 
+                t.section, 
+                t.title AS task_title,
+                COALESCE(l.is_done, FALSE) AS is_done,
+                COALESCE(l.reflection, '') AS reflection
+            FROM routine_templates t
+            CROSS JOIN (
+                SELECT generate_series($2::date, $3::date, '1 day'::interval)::date AS date_val
+            ) d
+            LEFT JOIN student_daily_logs l 
+                ON l.template_id = t.id 
+                AND l.student_id = $1 
+                AND l.log_date = d.date_val
+            WHERE t.status = 'active' AND t.batch_id = $4
+            ORDER BY d.date_val DESC, t.section ASC, t.task_order ASC;
+        """
+        rows = await conn.fetch(detail_query, student_id, start_date, today, BATCH_ID)
+
+    if not rows:
+        msg = f"📌 {student_name} အတွက် ပြီးခဲ့သည့် ၇ ရက်အတွင်း ဒေတာ မရှိသေးပါ။"
+        if isinstance(update_or_query, Update) and update_or_query.callback_query:
+            await update_or_query.callback_query.edit_message_text(msg)
+        else:
+            await update_or_query.message.reply_text(msg)
+        return
+
+    # 📊 Excel Workbook ဖန်တီးခြင်း
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Progress Report"
+
+    # Excel Styling များ သတ်မှတ်ခြင်း
+    header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    header_font = Font(name="Myanmar Text", size=11, bold=True, color="FFFFFF")
+    bold_font = Font(name="Myanmar Text", size=10, bold=True)
+    normal_font = Font(name="Myanmar Text", size=10)
+    center_align = Alignment(horizontal="center", vertical="center")
+    left_align = Alignment(horizontal="left", vertical="center")
+    border_thin = Border(
+        left=Side(style='thin', color='D9D9D9'),
+        right=Side(style='thin', color='D9D9D9'),
+        top=Side(style='thin', color='D9D9D9'),
+        bottom=Side(style='thin', color='D9D9D9')
+    )
+
+    # 1. ခေါင်းစဉ်ထည့်ခြင်း
+    ws.merge_cells("A1:E1")
+    title_cell = ws["A1"]
+    title_cell.value = f"Student Progress Report: {student_name} ({start_date} to {today})"
+    title_cell.font = Font(name="Myanmar Text", size=12, bold=True, color="1F4E78")
+    title_cell.alignment = center_align
+
+    done_count = sum(1 for r in rows if r["is_done"])
+    total_count = len(rows)
+    
+    ws.merge_cells("A2:E2")
+    summary_cell = ws["A2"]
+    summary_cell.value = f"စုစုပေါင်း ပြီးစီးမှု: {done_count} / {total_count} Tasks"
+    summary_cell.font = bold_font
+    summary_cell.alignment = left_align
+
+    ws.append([]) # Row 3 (Empty)
+
+    # 2. Table Headers
+    headers = ["ရက်စွဲ (Date)", "အပိုင်း (Section)", "လေ့ကျင့်ခန်း ခေါင်းစဉ် (Task Title)", "အခြေအနေ (Status)", "ဆင်ခြင်သုံးသပ်ချက် (Reflection)"]
+    ws.append(headers)
+    
+    for col_num in range(1, 6):
+        cell = ws.cell(row=4, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+
+    # 3. Data ထည့်သွင်းခြင်း
+    for r in rows:
+        status_str = "Done (ပြီးပြီ)" if r["is_done"] else "Pending (မပြီးသေး)"
+        row_data = [
+            str(r["log_date"]),
+            r["section"],
+            r["task_title"],
+            status_str,
+            r["reflection"]
+        ]
+        ws.append(row_data)
+
+    # Data row များကို Border နှင့် Font ထည့်ခြင်း
+    for row in ws.iter_rows(min_row=5, max_row=4 + len(rows), min_col=1, max_col=5):
+        for cell in row:
+            cell.font = normal_font
+            cell.border = border_thin
+            if cell.column in [1, 2, 4]:
+                cell.alignment = center_align
+            else:
+                cell.alignment = left_align
+
+    # Column အကျယ်များကို အလိုအလျောက် သင့်လျော်အောင် ချိန်ညှိခြင်း
+    #for col in ws.columns:
+        #max_len = max(len(str(cell.value or '')) for cell in col)
+        #col_letter = col[0].column_letter
+        #ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
+    
+    # 🟢 ကော်လံ အကျယ်များကို အလိုအလျောက် သင့်လျော်အောင် ချိန်ညှိခြင်း (MergedCell Error ကင်းဝေးစေရန်)
+    for col in range(1, 6):
+        max_len = 0
+        col_letter = openpyxl.utils.get_column_letter(col)
+        
+        # Row 4 (Header) ကနေစပြီး Data တွေအထိ အရှည်ဆုံး စာသားကို ရှာခြင်း
+        for row in range(4, 5 + len(rows)):
+            cell_value = ws.cell(row=row, column=col).value
+            if cell_value:
+                max_len = max(max_len, len(str(cell_value)))
+                
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 18)
+
+    # Memory ထဲသို့ သိမ်းဆည်းခြင်း (BytesIO)
+    excel_file = io.BytesIO()
+    wb.save(excel_file)
+    excel_file.seek(0)
+    excel_file.name = f"{student_name}_report.xlsx"
+
+    # 📤 Telegram သို့ Document အဖြစ် ပို့ဆောင်ခြင်း
+    try:
+        # Status မက်ဆေ့ချ်ကို ဖယ်ရှားရန် သို့မဟုတ် Update လုပ်ရန်
+        target_message = update_or_query.message if isinstance(update_or_query, Update) else update_or_query
+        
+        await target_message.reply_document(
+            document=excel_file,
+            caption=f"📊 *{student_name}* ၏ (၇) ရက်တာ အစီရင်ခံစာ (Excel ဖိုင်)\n✅ ပြီးစီးမှု: *{done_count}/{total_count} Tasks*",
+            parse_mode="Markdown"
+        )
+        
+        # အကယ်၍ Callback Query ဖြစ်နေပါက မူလ စာသားကို ရှင်းလင်းပေးရန်
+        if isinstance(update_or_query, Update) and update_or_query.callback_query:
+            await update_or_query.callback_query.answer()
+            
+    except Exception as e:
+        print(f"❌ Send Excel Report Error: {e}")         
+async def generate_and_send_report3(update_or_query, context, student_id, student_name, start_date, today):
+    async with db_pool.acquire() as conn:
+        detail_query = """
+            SELECT 
+                d.date_val AS log_date, 
+                t.section, 
+                t.title AS task_title,
+                COALESCE(l.is_done, FALSE) AS is_done,
+                COALESCE(l.reflection, '') AS reflection
+            FROM routine_templates t
+            CROSS JOIN (
+                SELECT generate_series($2::date, $3::date, '1 day'::interval)::date AS date_val
+            ) d
+            LEFT JOIN student_daily_logs l 
+                ON l.template_id = t.id 
+                AND l.student_id = $1 
+                AND l.log_date = d.date_val
+            WHERE t.status = 'active' AND t.batch_id = $4
+            ORDER BY d.date_val DESC, t.section ASC, t.task_order ASC;
+        """
+        # 🟢 BATCH_ID ဖြင့် စစ်ထုတ်ခြင်း ($4)
+        rows = await conn.fetch(detail_query, student_id, start_date, today, BATCH_ID)
+
+    if not rows:
+        msg = f"📌 {student_name} အတွက် ပြီးခဲ့သည့် ၇ ရက်အတွင်း ဒေတာ မရှိသေးပါ။"
+        if isinstance(update_or_query, Update) and update_or_query.callback_query:
+            await update_or_query.callback_query.edit_message_text(msg)
+        else:
+            await update_or_query.message.reply_text(msg)
+        return
+
+    # 📊 ရက်စွဲအလိုက် စုစည်းတွက်ချက်ခြင်း (Graph/Progress Bar ဖန်တီးရန်)
+    daily_stats = {}
+    for r in rows:
+        d_val = r["log_date"]
+        if d_val not in daily_stats:
+            daily_stats[d_val] = {"done": 0, "total": 0}
+        daily_stats[d_val]["total"] += 1
+        if r["is_done"]:
+            daily_stats[d_val]["done"] += 1
+
+    done_count = sum(1 for r in rows if r["is_done"])
+    total_count = len(rows)
+
+    # 📝 Report Header
+    report_text = f"📊 *{student_name} ၏ (၇) ရက်တာ အစီရင်ခံစာ*\n"
+    report_text += f"━━━━━━━━━━━━━━━━━━━━━\n"
+    report_text += f"🎯 စုစုပေါင်း ပြီးစီးမှု: *{done_count} / {total_count}* Tasks\n\n"
+    
+    # 📈 Visual Progress Bar / Graph ပုံစံ ဖန်တီးခြင်း
+    report_text += f"📉 *နေ့အလိုက် ပြီးစီးမှု ဇယား (Progress Graph):*\n"
+    
+    for d_val in sorted(daily_stats.keys()):
+        stats = daily_stats[d_val]
+        d_done = stats["done"]
+        d_total = stats["total"]
+        
+        # 🟩 အလုပ်ပြီးပါက အစိမ်းကွက်၊ မပြီးသေးပါက အဖြူ/အမည်းကွက်ပြခြင်း
+        if d_total > 0:
+            percentage = d_done / d_total
+            filled_blocks = round(percentage * 5) # ၅ ကွက်ပုံစံ graph
+            empty_blocks = 5 - filled_blocks
+            bar = "🟩" * filled_blocks + "⬜" * empty_blocks
+        else:
+            bar = "⬜⬜⬜⬜⬜"
+            
+        date_str = d_val.strftime("%m-%d (%a)")
+        report_text += f"`{date_str}` | {bar} *{d_done}/{d_total}*\n"
+
+    report_text += f"━━━━━━━━━━━━━━━━━━━━━\n"
+    report_text += f"📌 *နောက်ဆုံး မှတ်တမ်းအသေးစိတ်:*\n"
+    
+    for r in rows[:10]: # စာသားအရှည်မလွန်စေရန် ၁၀ ခုပြခြင်း
+        status_icon = "✅" if r["is_done"] else "❌"
+        report_text += f"• `{r['log_date']}` | {r['section'][:4]} | {r['task_title']} {status_icon}\n"
+
+    try:
+        if isinstance(update_or_query, Update) and update_or_query.callback_query:
+            await update_or_query.callback_query.edit_message_text(report_text, parse_mode="Markdown")
+        else:
+            message = update_or_query.message or update_or_query.effective_message
+            await message.reply_text(report_text, parse_mode="Markdown")
+    except Exception as e:
+        print(f"❌ Send Report Error: {e}")
+
+async def generate_and_send_report2(update_or_query, context, student_id, student_name, start_date, today):
     async with db_pool.acquire() as conn:
         detail_query = """
             SELECT 
@@ -921,7 +1335,7 @@ async def cmd_send_routine(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Section အမည် မှားယွင်းနေပါသည်။")
         return
 
-    status_msg = await update.message.reply_text(f"⏳ Batch TharThar အတွက် *{section}* routine ပို့ဆောင်နေပါသည်...", parse_mode="Markdown")
+    status_msg = await update.message.reply_text(f"⏳ Batch BATCH_ID အတွက် *{section}* routine ပို့ဆောင်နေပါသည်...", parse_mode="Markdown")
     
     # broadcast ဖန်ရှင်ကို ခေါ်ခြင်း
     sent_count = await broadcast_routine_to_students(section_name=section, header_text=SECTION_HEADERS[section])
@@ -1025,9 +1439,93 @@ async def broadcast_routine_to_students(section_name: str, header_text: str, tar
     return count   
     
 
-
-
 async def send_weekly_report(app, manual_chat_id=None):
+    target_recipients = [manual_chat_id] if manual_chat_id else ADMIN_IDS
+
+    async with db_pool.acquire() as conn:
+        # ၁။ ခြုံငုံသုံးသပ်ချက် (Summary Performance) ယူရန်
+        perf_query = """
+            SELECT s.student_name,
+                   COUNT(log.id) FILTER (WHERE log.is_done = TRUE) as total_done,
+                   COUNT(DISTINCT log.log_date) as active_days
+            FROM students s
+            LEFT JOIN student_daily_logs log 
+                ON s.student_id = log.student_id 
+                AND log.log_date >= CURRENT_DATE - INTERVAL '7 days'
+            WHERE s.batch_id = $1
+            GROUP BY s.student_id, s.student_name
+            ORDER BY total_done DESC;
+        """
+        perf_rows = await conn.fetch(perf_query, BATCH_ID)
+
+        # ၂။ အသေးစိတ် မှတ်တမ်းများ (Detailed Logs for the past 7 days) ယူရန်
+        detail_query = """
+            SELECT s.student_name,
+                   log.log_date,
+                   t.section,
+                   t.title AS task_title,
+                   CASE WHEN log.is_done THEN 'Done (ပြီးပြီ)' ELSE 'Pending (မပြီးသေး)' END as status,
+                   COALESCE(log.reflection, '') as reflection
+            FROM students s
+            CROSS JOIN routine_templates t
+            LEFT JOIN student_daily_logs log
+                ON s.student_id = log.student_id
+                AND t.id = log.template_id
+                AND log.log_date >= CURRENT_DATE - INTERVAL '7 days'
+            WHERE s.batch_id = $1 AND t.batch_id = $1 AND t.status = 'active'
+            ORDER BY s.student_name ASC, log.log_date DESC, t.section ASC;
+        """
+        detail_rows = await conn.fetch(detail_query, BATCH_ID)
+
+    if not perf_rows:
+        for admin_id in target_recipients:
+            await app.bot.send_message(chat_id=admin_id, text="📌 ပြီးခဲ့သည့် ၇ ရက်အတွင်း ဒေတာ မရှိသေးပါ။")
+        return
+
+    # Pandas DataFrames များ တည်ဆောက်ခြင်း
+    df_perf = pd.DataFrame([dict(r) for r in perf_rows])
+    df_perf.columns = ["သင်တန်းသား အမည်", "ပြီးမြောက်သည့် Task အရေအတွက်", "ဝင်ရောက်လုပ်ကိုင်သည့် ရက်ပေါင်း"]
+
+    if detail_rows:
+        df_detail = pd.DataFrame([dict(r) for r in detail_rows])
+        df_detail.columns = ["သင်တန်းသား အမည်", "ရက်စွဲ", "အပိုင်း", "လေ့ကျင့်ခန်း ခေါင်းစဉ်", "အခြေအနေ", "ဆင်ခြင်သုံးသပ်ချက်"]
+    else:
+        df_detail = pd.DataFrame(columns=["သင်တန်းသား အမည်", "ရက်စွဲ", "အပိုင်း", "လေ့ကျင့်ခန်း ခေါင်းစဉ်", "အခြေအနေ", "ဆင်ခြင်သုံးသပ်ချက်"])
+
+    # Excel ဖိုင်ထဲသို့ Tab နှစ်ခု (Summary နဲ့ Detail) ဖြင့် ထည့်သွင်းခြင်း
+    excel_buffer = io.BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        df_perf.to_excel(writer, sheet_name='Performance Summary', index=False)
+        df_detail.to_excel(writer, sheet_name='Detailed Logs', index=False)
+    excel_buffer.seek(0)
+    excel_buffer.name = f"Weekly_Report_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+
+    # Telegram တွင် Admin ထံသို့ စာသားအကျဉ်းချုပ်နှင့် Excel ဖိုင် ပို့ဆောင်ခြင်း
+    summary_text = (
+        f"📊 *တစ်ပတ်တာ အကျဉ်းချုပ် အစီရင်ခံစာ*\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👥 စုစုပေါင်း သင်တန်းသားဦးရေ: *{len(perf_rows)}* ဦး\n"
+        f"📅 ကာလ: လွန်ခဲ့သော ၇ ရက်အတွင်း\n\n"
+        f"📁 အသေးစိတ် အချက်အလက်များ (Performance Summary နှင့် Detailed Logs များကို Excel တွင် Tab ခွဲ၍) ပူးတွဲတင်ပြအပ်ပါသည်။"
+    )
+
+    for admin_id in target_recipients:
+        try:
+            # ၁။ Text အကျဉ်းချုပ် ပို့မည်
+            await app.bot.send_message(chat_id=admin_id, text=summary_text, parse_mode="Markdown")
+            
+            # ၂။ Excel ဖိုင် ပို့မည်
+            excel_buffer.seek(0) # Buffer pointer ကို အစသို့ ပြန်ပို့ရန်
+            await app.bot.send_document(
+                chat_id=admin_id,
+                document=excel_buffer,
+                filename=excel_buffer.name,
+                caption="📈 *တစ်ပတ်တာ အသေးစိတ် Excel အစီရင်ခံစာ*"
+            )
+        except Exception as e:
+            print(f"Failed to send weekly report to {admin_id}: {e}")
+
+async def send_weekly_report2(app, manual_chat_id=None):
     target_recipients = [manual_chat_id] if manual_chat_id else ADMIN_IDS
 
     perf_query = """
@@ -1047,25 +1545,25 @@ async def send_weekly_report(app, manual_chat_id=None):
 
     if not perf_rows:
         for admin_id in target_recipients:
-            await app.bot.send_message(chat_id=admin_id, text="Batch TharThar အတွက် ပြီးခဲ့သည့် ၇ ရက်အတွင်း ဒေတာ မရှိသေးပါ။")
+            await app.bot.send_message(chat_id=admin_id, text="ပြီးခဲ့သည့် ၇ ရက်အတွင်း ဒေတာ မရှိသေးပါ။")
         return
 
     df_perf = pd.DataFrame([dict(r) for r in perf_rows])
-    df_perf.columns = ["သင်တန်းသားနာမည်", "ပြီးမြောက်သည့် Task အရေအတွက်", "ဝင်ရောက်လုပ်ကိုင်သည့် ရက်ပေါင်း"]
+    df_perf.columns = [BATCH_ID, "ပြီးမြောက်သည့် Task အရေအတွက်", "ဝင်ရောက်လုပ်ကိုင်သည့် ရက်ပေါင်း"]
 
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        df_perf.to_excel(writer, sheet_name='Batch TharThar Performance', index=False)
+        df_perf.to_excel(writer, sheet_name='Performance', index=False)
     excel_buffer.seek(0)
 
     for admin_id in target_recipients:
         try:
-            filename = f"Batch TharThar_Weekly_Report_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+            filename = f"Weekly_Report_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
             await app.bot.send_document(
                 chat_id=admin_id,
                 document=excel_buffer,
                 filename=filename,
-                caption="📁 *Batch TharThar သင်တန်းသားများ၏ တစ်ပတ်တာ အသေးစိတ်စာရင်း Excel ဖိုင်*"
+                caption="📁 *သင်တန်းသားများ၏ တစ်ပတ်တာ အသေးစိတ်စာရင်း Excel ဖိုင်*"
             )
         except Exception as e:
             print(f"Failed to send weekly report: {e}")
@@ -1082,9 +1580,9 @@ async def handle_teacher_action(update: Update, context: ContextTypes.DEFAULT_TY
     student_id = int(student_id_str)
 
     section_titles = {
-        "morning": "🌅 *(က) မနက်ပိုင်း လေ့ကျင့်မှု (5:00 AM - 12:00 PM)*",
-        "afternoon": "☀️ *(ခ) နေ့လယ်ပိုင်း လေ့ကျင့်မှု (12:00 PM - 5:00 PM)*",
-        "evening": "🌙 *(ဂ) ညနေပိုင်း လေ့ကျင့်မှု (5:00 PM - 12:00 AM)*"
+        "morning": "🌅 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) *(က) မနက်ပိုင်း လေ့ကျင့်မှု (5:00 AM - 12:00 PM)*",
+        "afternoon": "☀️ သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) *(ခ) နေ့လယ်ပိုင်း လေ့ကျင့်မှု (12:00 PM - 5:00 PM)*",
+        "evening": "🌙 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) *(ဂ) ညနေပိုင်း လေ့ကျင့်မှု (5:00 PM - 12:00 AM)*"
     }
     header_text = section_titles.get(section, "သတိပဋ္ဌာန် လေ့ကျင့်မှု")
     sent = await broadcast_routine_to_students(section, header_text, target_student_id=student_id)
@@ -1256,9 +1754,9 @@ async def send_evening_all_pending_summary(application):
             f"🌙 *တစ်နေ့တာ လေ့ကျင့်မှု အကျဉ်းချုပ် သတိပေးချက်*\n\n"
             f"မင်္ဂလာပါ *{s_name}* ခင်ဗျာ၊\n"
             f"ယနေ့အတွက် မပြီးပြတ်သေးသော အလေ့အကျင့် စုစုပေါင်း (*{total_p}*) ခု ကျန်ရှိနေပါသည်:\n\n"
-            f"  🌅 မနက်ပိုင်း အလုပ်ကြွေး: *{m_count}* ခု\n"
-            f"  ☀️ နေ့လယ်ပိုင်း အလုပ်ကြွေး: *{a_count}* ခု\n"
-            f"  🌙 ညနေပိုင်း အလုပ်ကြွေး: *{e_count}* ခု\n\n"
+            f"  🌅 မနက်ပိုင်း အလုပ် *{m_count}* ခု\n"
+            f"  ☀️ နေ့လယ်ပိုင်း အလုပ် *{a_count}* ခု\n"
+            f"  🌙 ညနေပိုင်း အလုပ် *{e_count}* ခု\n\n"
             f"အိပ်ရာမဝင်မီ စိတ်တည်ငြိမ်အေးချမ်းစွာဖြင့် ကျန်ရှိနေသည်များကို ပြီးမြောက်အောင် ဖြည့်စွက်ပေးပါခင်ဗျာ။ 🙏"
         )
 
@@ -1283,8 +1781,8 @@ async def cmd_remind_pending(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not context.args:
         help_text = (
             "📌 *အသုံးပြုပုံ:*\n"
-            "`/remind_pending morning` (မနက်ခင်း အလုပ်ကြွေး)\n"
-            "`/remind_pending afternoon` (နေ့လယ်ခင်း အလုပ်ကြွေး)\n"
+            "`/remind_pending morning` (မနက်ခင်း အလုပ်)\n"
+            "`/remind_pending afternoon` (နေ့လယ်ခင်း အလုပ်)\n"
             "`/remind_pending evening` (ညနေ စုစုပေါင်း အရေအတွက်)"
         )
         await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -1332,7 +1830,7 @@ async def post_init(application):
     scheduler.add_job(
         broadcast_routine_to_students,
         CronTrigger(hour=5, minute=0, timezone=ZoneInfo("Asia/Yangon")),
-        args=["morning", "🌅 မင်္ဂလာနံနက်ခင်းပါခင်ဗျာ၊ ယနေ့ နံနက်ပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
+        args=["morning", "🌅 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) မင်္ဂလာနံနက်ခင်းပါခင်ဗျာ၊ ယနေ့ နံနက်ပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
         id="morning_routine",
         name="Morning Routine Checklist"
     )
@@ -1340,7 +1838,7 @@ async def post_init(application):
     scheduler.add_job(
         broadcast_routine_to_students,
         CronTrigger(hour=12, minute=0, timezone=ZoneInfo("Asia/Yangon")),
-        args=["afternoon", "☀️ မင်္ဂလာနေ့လယ်ခင်းပါခင်ဗျာ၊ နေ့လယ်ပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
+        args=["afternoon", "☀️ သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) မင်္ဂလာနေ့လယ်ခင်းပါခင်ဗျာ၊ နေ့လယ်ပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
         id="afternoon_routine",
         name="Afternoon Routine Checklist"
     )
@@ -1348,7 +1846,7 @@ async def post_init(application):
     scheduler.add_job(
         broadcast_routine_to_students,
         CronTrigger(hour=17, minute=0, timezone=ZoneInfo("Asia/Yangon")),
-        args=["evening", "🌙 မင်္ဂလာညချမ်းပါခင်ဗျာ၊ ညပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
+        args=["evening", "🌙 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) မင်္ဂလာညချမ်းပါခင်ဗျာ၊ ညပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
         id="evening_routine",
         name="Evening Routine Checklist"
     )
@@ -1403,7 +1901,7 @@ async def post_init(application):
         name="Weekly Report"
     )
     scheduler.start()
-    print("⏰ Routine & Report Schedulers started successfully (Batch TharThar)...")
+    print(f"⏰ Routine & Report Schedulers started successfully ({BATCH_ID})...")
 
 
 async def manual_weekly_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1668,7 +2166,7 @@ async def main():
     app.add_handler(CallbackQueryHandler(handle_send_routine_callback, pattern=r"^send_routine:"))
     app.add_error_handler(error_handler)
 
-    print("🤖 Teacher Bot (Batch TharThar) is up and running...")
+    print(f"🤖 Teacher Bot ({BATCH_ID}) is up and running...")
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
