@@ -1399,7 +1399,7 @@ async def broadcast_routine_to_students(section_name: str, header_text: str, tar
                         chat_id=chat_id,
                         text=f"{header_text}\n\nအောက်ပါ လေ့ကျင့်မှုများကို ပြုလုပ်ပြီးပါက သက်ဆိုင်ရာခလုတ်ကို နှိပ်ပေးပါခင်ဗျာ -",
                         reply_markup=InlineKeyboardMarkup(header_keyboard),
-                        parse_mode="Markdown"
+                        #parse_mode="Markdown"
                     )
                     batch_message_ids.append(h_msg.message_id)
 
@@ -1417,7 +1417,7 @@ async def broadcast_routine_to_students(section_name: str, header_text: str, tar
                             chat_id=chat_id,
                             text=task_text,
                             reply_markup=InlineKeyboardMarkup(task_keyboard),
-                            parse_mode="Markdown"
+                            #parse_mode="Markdown"
                         )
                         batch_message_ids.append(t_msg.message_id)
 
@@ -2100,12 +2100,12 @@ async def cmd_view_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not pending_students:
         await update.message.reply_text(
-            f"🎉 *ယနေ့ ({today.strftime('%d/%m/%Y')}) အခြေအနေ:*\n\nသင်တန်းသားအားလုံး သတ်မှတ်ထားသော Routine များကို အပြည့်အဝ ပြီးမြောက်ထားကြပါသည် (အလုပ်ကြွေး မရှိပါ)။",
+            f"🎉 *ယနေ့ ({today.strftime('%d/%m/%Y')}) အခြေအနေ:*\n\nသင်တန်းသားအားလုံး သတ်မှတ်ထားသော Routine များကို အပြည့်အဝ ပြီးမြောက်ထားကြပါသည်။",
             parse_mode="Markdown"
         )
         return
 
-    msg = [f"📋 *ယနေ့ ({today.strftime('%d/%m/%Y')}) အလုပ်ကြွေး ကျန်ရှိသူများ စာရင်း*\n━━━━━━━━━━━━━━━━━━━━\n"]
+    msg = [f"📋 *ယနေ့ ({today.strftime('%d/%m/%Y')}) အလုပ်လုပ်ရန် ကျန်ရှိသူများ စာရင်း*\n━━━━━━━━━━━━━━━━━━━━\n"]
 
     for stu in pending_students:
         s_name = stu["student_name"] or "အမည်မသိ"
