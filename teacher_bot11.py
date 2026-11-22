@@ -50,9 +50,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 BATCH_ID = os.getenv("BATCH_ID", "batch_Youth")
 
 SECTION_HEADERS = {
-    "morning": "🌅 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) *(က) မနက်ပိုင်း လေ့ကျင့်မှု (5:00 AM - 12:00 PM)*",
-    "afternoon": "☀️ သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) *(ခ) နေ့လယ်ပိုင်း လေ့ကျင့်မှု (12:00 PM - 5:00 PM)*",
-    "evening": "🌙 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) *(ဂ) ညနေပိုင်း လေ့ကျင့်မှု (5:00 PM - 12:00 AM)*",
+    "morning": "🌅 *(က) မနက်ပိုင်း လေ့ကျင့်မှု (5:00 AM - 12:00 PM)*",
+    "afternoon": "☀️ *(ခ) နေ့လယ်ပိုင်း လေ့ကျင့်မှု (12:00 PM - 5:00 PM)*",
+    "evening": "🌙 *(ဂ) ညနေပိုင်း လေ့ကျင့်မှု (5:00 PM - 12:00 AM)*",
 }
 
 # Admin IDs စာရင်းထဲသို့ ထည့်သွင်းခြင်း (0 မဟုတ်သူများကိုသာ ယူမည်)
@@ -323,9 +323,9 @@ async def handle_send_routine_callback(update: Update, context: ContextTypes.DEF
     target_student_id = int(parts[2]) if len(parts) > 2 else None
 
     header_titles = {
-        "morning": "🌅 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3)*မနက်ပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*",
-        "afternoon": "☀️ သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3)*နေ့လည်ပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*",
-        "evening": "🌙 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) *ညနေပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*"
+        "morning": "🌅 *မနက်ပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*",
+        "afternoon": "☀️ *နေ့လည်ပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*",
+        "evening": "🌙 *ညနေပိုင်း သတိပဋ္ဌာန်နှင့် စိတ်လေ့ကျင့်ခန်းများ*"
     }
     header_text = header_titles.get(section, "📌 *နေ့စဉ် လေ့ကျင့်ခန်းများ*")
 
@@ -1739,7 +1739,7 @@ async def post_init(application):
     scheduler.add_job(
         scheduled_routine_job,
         CronTrigger(hour=5, minute=0, timezone=ZoneInfo("Asia/Yangon")),
-        args=["morning", "🌅 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) မင်္ဂလာနံနက်ခင်းပါခင်ဗျာ၊ ယနေ့ နံနက်ပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
+        args=["morning", "🌅 မင်္ဂလာနံနက်ခင်းပါခင်ဗျာ၊ ယနေ့ နံနက်ပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
         id="morning_routine",
         name="Morning Routine Checklist"
     )
@@ -1747,7 +1747,7 @@ async def post_init(application):
     scheduler.add_job(
         scheduled_routine_job,
         CronTrigger(hour=12, minute=0, timezone=ZoneInfo("Asia/Yangon")),
-        args=["afternoon", "☀️ သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) မင်္ဂလာနေ့လယ်ခင်းပါခင်ဗျာ၊ နေ့လယ်ပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
+        args=["afternoon", "☀️ မင်္ဂလာနေ့လယ်ခင်းပါခင်ဗျာ၊ နေ့လယ်ပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
         id="afternoon_routine",
         name="Afternoon Routine Checklist"
     )
@@ -1755,7 +1755,7 @@ async def post_init(application):
     scheduler.add_job(
         scheduled_routine_job,
         CronTrigger(hour=17, minute=0, timezone=ZoneInfo("Asia/Yangon")),
-        args=["evening", "🌙 သတိပညာ -နေ့စဉ်ကမ္ဘာ(Level-3) မင်္ဂလာညချမ်းပါခင်ဗျာ၊ ညပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
+        args=["evening", "🌙 မင်္ဂလာညချမ်းပါခင်ဗျာ၊ ညပိုင်း လေ့ကျင့်မှုများ ဖြစ်ပါသည် -"],
         id="evening_routine",
         name="Evening Routine Checklist"
     )
